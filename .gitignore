@@ -1,0 +1,4 @@
+contracts/eoscommission/*.abi
+contracts/eoscommission/*.wasm
+contracts/eoscommission/*.wast
+contracts/wallet_private_key.txt

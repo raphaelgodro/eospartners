@@ -1,4 +1,4 @@
-#include <eoscommission.hpp>
+#include <eoscomm.hpp>
 
 #include <eosiolib/action.hpp>
 #include <string>
@@ -9,7 +9,107 @@
 using namespace std;
 using namespace eosio;
 
-void eosnames::addlisting(const account_name    _seller,
+void eoscomm::apply(const account_name contract, const account_name act)
+{
+
+    if (act == N(transfer))
+    {
+        transferReceived(unpack_action_data<currency::transfer>(), contract);
+        return;
+    }
+
+    auto &thiscontract = *this;
+
+    switch (act)
+    {
+        EOSIO_API(eoscomm, (addpartner)(setconfig)(close))
+    };
+}
+
+void eoscomm::transferReceived(const currency::transfer &transfer, const account_name code)
+{
+    if (transfer.to != _self)
+    {
+        return;
+    }
+
+    print("Account Name     :   ", name{code}, "\n");
+    print("From             :   ", name{transfer.from}, "\n");
+    print("To               :   ", name{transfer.to}, "\n");
+    print("Asset            :   ", transfer.quantity, "\n");
+    print("Received Amount  :   ", transfer.quantity.amount, "\n");
+    print("Received Symbol  :   ", transfer.quantity.symbol, "\n");
+    print("Memo             :   ", transfer.memo, "\n");
+
+    auto total_amount = transfer.quantity.amount;
+
+    partner_table p_t(_self, _self);
+    for (auto itr = p_t.cbegin(); itr != p_t.cend(); ++itr) {
+        print(name{itr->partner_acct});
+        auto partner_acct = itr->partner_acct;
+        asset amount_dispatched  = transfer.quantity * itr->weightx100 / 100;
+        //asset comm = transfer.quantity * c_itr->comm_x100 / 10000;
+        paytoken(_self, partner_acct, amount_dispatched, transfer.memo);
+    }
+
+}
+
+void eoscomm::addpartner( const account_name partner,
+                          const uint32_t weightx100)
+{
+    require_auth(_self);
+    config_table c_t (_self, _self);
+    eosio_assert(c_t.begin() != c_t.end(), "Config is not set.");
+    auto itr = c_t.find(0);
+    eosio_assert(itr->settled != 1, "Contract is settled");
+
+    partner_table p_t(_self, _self);
+
+
+    p_t.emplace(_self, [&](auto &l) {
+        l.partner_acct = partner;
+        l.weightx100 = weightx100;
+        l.issued_time = now();
+    });
+}
+
+void eoscomm::close()
+{
+    require_auth(_self);
+    config_table c_t (_self, _self);
+
+    eosio_assert(c_t.begin() != c_t.end(), "Config is not set.");
+    auto itr = c_t.find(0);
+
+    c_t.modify (itr, _self, [&](auto& c) {
+      c.settled      = 1;
+    });
+}
+
+void eoscomm::setconfig(const account_name _token_contract,
+                        const string _symbol,
+                        const uint8_t _symbol_precision)
+{
+    require_auth(_self);
+
+    config_table c_t(_self, _self);
+    auto itr = c_t.begin();
+    if (itr != c_t.end())
+    {
+        c_t.erase(itr);
+    }
+
+    c_t.emplace(_self, [&](auto &c) {
+        c.config_id = c_t.available_primary_key();
+        c.token_contract = _token_contract;
+        c.payment_symbol = string_to_symbol(_symbol_precision, _symbol.c_str());
+        c.settled = 0;
+    });
+
+}
+
+/*
+void eoscomm::addlisting(const account_name    _seller,
                           const account_name    _account_for_sale,
                           const asset           _price)
 {
@@ -39,7 +139,7 @@ void eosnames::addlisting(const account_name    _seller,
     chgactivekey (_account_for_sale, c_itr->holding_pk, true);
 }
 
-void eosnames::dellisting(const uint64_t _listing_id)
+void eoscomm::dellisting(const uint64_t _listing_id)
 {
     listing_table l_t(_self, _self);
     auto itr = l_t.find(_listing_id);
@@ -48,7 +148,7 @@ void eosnames::dellisting(const uint64_t _listing_id)
     l_t.erase(itr);
 }
 
-void eosnames::setconfig(const uint32_t     _comm_x100,
+void eoscomm::setconfig(const uint32_t     _comm_x100,
                          const account_name _comm_account,
                          const account_name _token_contract,
                          const string       _symbol,
@@ -74,7 +174,7 @@ void eosnames::setconfig(const uint32_t     _comm_x100,
     });
 }
 
-void eosnames::purchase(const uint64_t      _listing_id,
+void eoscomm::purchase(const uint64_t      _listing_id,
                         const account_name  _buyer,
                         const public_key    _new_owner_key,
                         const public_key    _new_active_key,
@@ -105,7 +205,7 @@ void eosnames::purchase(const uint64_t      _listing_id,
     }
 }
 
-void eosnames::apply(const account_name contract, const account_name act)
+void eoscomm::apply(const account_name contract, const account_name act)
 {
 
     if (act == N(transfer))
@@ -118,11 +218,11 @@ void eosnames::apply(const account_name contract, const account_name act)
 
     switch (act)
     {
-        EOSIO_API(eosnames, (setconfig)(addlisting)(dellisting)(purchase))
+        EOSIO_API(eoscomm, (setconfig)(addlisting)(dellisting)(purchase))
     };
 }
 
-void eosnames::transferReceived(const currency::transfer &transfer, const account_name code)
+void eoscomm::transferReceived(const currency::transfer &transfer, const account_name code)
 {
     if (transfer.to != _self)
     {
@@ -166,78 +266,8 @@ void eosnames::transferReceived(const currency::transfer &transfer, const accoun
     chgactivekey (l_itr->account_for_sale, b_itr->new_active_key, false);
     l_t.erase(l_itr);
 }
+*/
 
-
-// void eosnames::newacct(string _acctname, public_key _key)
-// {
-
-//     string account_name_str = _acctname;
-//     eosio_assert(account_name_str.length() == 12, "Length of account name should be 12");
-//     account_name new_account_name = string_to_name(account_name_str.c_str());
-
-//     key_weight pubkey_weight = {
-//         .key = _key,
-//         .weight = 1,
-//     };
-//     authority owner = authority{
-//         .threshold = 1,
-//         .keys = {pubkey_weight},
-//         .accounts = {},
-//         .waits = {}};
-
-//     authority active = authority{
-//         .threshold = 1,
-//         .keys = {pubkey_weight},
-//         .accounts = {},
-//         .waits = {}};
-
-//     newaccount new_account = newaccount{
-//         .creator = _self,
-//         .name = new_account_name,
-//         .owner = owner,
-//         .active = active};
-
-//     action(
-//         permission_level{_self, N(active)},
-//         N(eosio),
-//         N(newaccount),
-//         new_account)
-//         .send();
-// }
-
-
-
-
-// void eosnames::changekey(account_name _acct, public_key _newkey, bool _addcode)
-// {
-//     vector<key_weight> keys = {key_weight{_newkey, 1}};
-//     authority auth;
-//     if (_addcode)
-//     {
-//         auth = authority{1, keys, {permission_level_weight{permission_level{_self, N(eosio.code)}, 1}}, {}};
-//     }
-//     else
-//     {
-//         auth = authority{1, keys, {}, {}};
-//     }
-
-//     auto update_auth_payload_1 = make_tuple(_acct, N(active), N(owner), auth);
-//     auto update_auth_payload_2 = make_tuple(_acct, N(owner), N(), auth);
-
-//     action(
-//         permission_level{_acct, N(owner)},
-//         N(eosio),
-//         N(updateauth),
-//         update_auth_payload_1)
-//         .send();
-
-//     action(
-//         permission_level{_acct, N(owner)},
-//         N(eosio),
-//         N(updateauth),
-//         update_auth_payload_2)
-//         .send();
-// }
 
 extern "C"
 {
@@ -247,7 +277,7 @@ extern "C"
     void apply(uint64_t receiver, uint64_t code, uint64_t action)
     {
         auto self = receiver;
-        eosnames contract(self);
+        eoscomm contract(self);
         contract.apply(code, action);
         eosio_exit(0);
     }
